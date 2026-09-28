@@ -1,0 +1,12 @@
+name: university_dbt
+version: '1.0.0'
+config-version: 2
+
+profile: university_dbt
+
+model-paths: [models]
+
+models:
+  university_dbt:
+    staging:
+      +materialized: view

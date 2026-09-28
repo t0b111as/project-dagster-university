@@ -1,0 +1,7 @@
+university_dbt:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('UNIVERSITY_DUCKDB_PATH', '../data/university.duckdb') }}"
+      schema: main

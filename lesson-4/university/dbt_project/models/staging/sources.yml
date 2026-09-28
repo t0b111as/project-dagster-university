@@ -1,0 +1,21 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: main
+    tables:
+      - name: raw_customers
+        description: Customers loaded by the Dagster raw_customers asset.
+        meta:
+          dagster:
+            asset_key: [raw_customers]
+      - name: raw_orders
+        description: Orders loaded by the Dagster raw_orders asset.
+        meta:
+          dagster:
+            asset_key: [raw_orders]
+      - name: raw_payments
+        description: Payments loaded by the Dagster raw_payments asset.
+        meta:
+          dagster:
+            asset_key: [raw_payments]

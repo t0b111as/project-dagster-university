@@ -1,15 +1,16 @@
 import dagster as dg
-
-import matplotlib.pyplot as plt
 import geopandas as gpd
+import matplotlib.pyplot as plt
+import pandas as pd
 from dagster_duckdb import DuckDBResource
-import duckdb
-import os
+
 from dagster_essentials.defs.assets import constants
+from dagster_essentials.defs.partitions import weekly_partition
 
 # src/dagster_essentials/defs/assets/metrics.py
 @dg.asset(
-    deps=["taxi_trips", "taxi_zones"]
+    deps=["taxi_trips", "taxi_zones"],
+    group_name="metrics"
 )
 def manhattan_stats(database: DuckDBResource) -> None:
     query = """
@@ -38,6 +39,7 @@ def manhattan_stats(database: DuckDBResource) -> None:
 # src/dagster_essentials/defs/assets/metrics.py
 @dg.asset(
     deps=["manhattan_stats"],
+    group_name="metrics"
 )
 def manhattan_map() -> None:
     trips_by_zone = gpd.read_file(constants.MANHATTAN_STATS_FILE_PATH)
@@ -54,20 +56,13 @@ def manhattan_map() -> None:
     plt.close(fig)
 
 
-from datetime import datetime, timedelta
-from dagster_essentials.defs.assets import constants
-
-import pandas as pd
-import dagster as dg
-from dagster._utils.backoff import backoff
-from dagster_essentials.defs import weekly_partition
-
 # src/dagster_essentials/defs/assets/metrics.py
 from dagster_essentials.defs.partitions import weekly_partition
 
 @dg.asset(
     deps=["taxi_trips"],
-    partitions_def=weekly_partition
+    partitions_def=weekly_partition,
+    group_name="metrics"
 )
 def trips_by_week(context: dg.AssetExecutionContext, database: DuckDBResource) -> None:
     """
@@ -78,19 +73,21 @@ def trips_by_week(context: dg.AssetExecutionContext, database: DuckDBResource) -
 
     # get all trips for the week
     query = f"""
-        SELECT
-            '{period_to_fetch}' AS period,
-            COUNT(*) AS num_trips,
-            COALESCE(SUM(total_amount), 0) AS total_amount,
-            COALESCE(SUM(trip_distance), 0) AS trip_distance,
-            COALESCE(SUM(passenger_count), 0) AS passenger_count
-        FROM trips
-        WHERE pickup_datetime >= '{period_to_fetch}'::date
-        AND pickup_datetime < '{period_to_fetch}'::date + INTERVAL '1 week'
+        select vendor_id, total_amount, trip_distance, passenger_count
+        from trips
+        where pickup_datetime >= '{period_to_fetch}'
+            and pickup_datetime < '{period_to_fetch}'::date + interval '1 week'
     """
 
     with database.get_connection() as conn:
-        aggregate = conn.execute(query).fetch_df()
+        data_for_week = conn.execute(query).fetch_df()
+
+    aggregate = data_for_week.agg({
+        "vendor_id": "count",
+        "total_amount": "sum",
+        "trip_distance": "sum",
+        "passenger_count": "sum"
+    }).rename({"vendor_id": "num_trips"}).to_frame().T # type: ignore
 
     # clean up the formatting of the dataframe
     aggregate["period"] = period_to_fetch
@@ -108,7 +105,3 @@ def trips_by_week(context: dg.AssetExecutionContext, database: DuckDBResource) -
         existing.to_csv(constants.TRIPS_BY_WEEK_FILE_PATH, index=False)
     except FileNotFoundError:
         aggregate.to_csv(constants.TRIPS_BY_WEEK_FILE_PATH, index=False)
-
-
-    
-
